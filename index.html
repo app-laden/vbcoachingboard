@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="VB Coach">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>Volleyball Coach</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#e9edf1;
+    font-family:-apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  body { position:fixed; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; }
+  #bar { display:flex; flex-wrap:nowrap; align-items:center; gap:3px; padding:3px 5px;
+    background:#fff; border-bottom:1px solid #cfd6dd; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  #bar button { flex:0 0 auto; font-size:13px; height:30px; padding:0 7px; border:1px solid #b9c2cb;
+    border-radius:6px; background:#f7f9fb; color:#1b2733; touch-action:manipulation; cursor:pointer;
+    white-space:nowrap; }
+  #bar button.main { background:#1b2733; color:#fff; border-color:#1b2733; font-weight:600; }
+  #bar button.on { background:#ffd23f; border-color:#c9a21a; font-weight:600; }
+  #bar .sep { flex:0 0 auto; width:1px; height:22px; background:#cfd6dd; margin:0 2px; }
+  #stage { position:relative; flex:1; min-height:0; }
+  #cv { position:absolute; top:0; left:0; touch-action:none; display:block; }
+  #file { display:none; }
+  #bFull { margin-left:auto; }
+  /* iPad zeigt im Vollbild oben links ein Schließen-Symbol – Platz dafür lassen */
+  :-webkit-full-screen #bar { padding-left:52px; }
+  :fullscreen #bar { padding-left:52px; }
+  @media (max-width: 900px) { #bar .lbl { display:none; } #bar button { padding:0 8px; } }
+  #toast { position:fixed; left:50%; top:46px; transform:translateX(-50%); background:#1b2733; color:#fff;
+    padding:8px 14px; border-radius:8px; font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:20; }
+  #ov { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.75); display:none;
+    flex-direction:column; align-items:center; justify-content:center; z-index:10; }
+  #ov img { max-width:92%; max-height:80%; background:#fff; -webkit-touch-callout:default; -webkit-user-select:auto; user-select:auto; }
+  #ov p { color:#fff; font-size:15px; margin:10px; text-align:center; }
+  #ov button { font-size:15px; height:36px; padding:0 18px; border-radius:8px; border:0; }
+  #bHelp { font-weight:700; }
+  #upd { position:fixed; left:0; right:0; bottom:0; background:#1e8e3e; color:#fff; font-size:15px;
+    font-weight:600; text-align:center; padding:12px 10px calc(12px + env(safe-area-inset-bottom)); display:none;
+    z-index:30; cursor:pointer; }
+  #help { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.5); display:none; z-index:25;
+    align-items:center; justify-content:center; }
+  #helpBox { background:#fff; width:min(640px, 94%); max-height:88%; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    border-radius:12px; padding:14px 20px 18px; color:#1b2733; font-size:15px; line-height:1.45;
+    -webkit-user-select:text; user-select:text; }
+  #helpBox h2 { font-size:19px; margin:4px 0 2px; }
+  #helpBox h3 { font-size:16px; margin:16px 0 4px; }
+  #helpBox ul { margin:4px 0; padding-left:20px; }
+  #helpBox p { margin:4px 0; }
+  #helpBox .ver { color:#66717d; font-size:13px; }
+  #helpBox .close { position:sticky; top:0; float:right; font-size:15px; height:34px; padding:0 14px;
+    border-radius:8px; border:1px solid #b9c2cb; background:#f7f9fb; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button class="main" id="bNew">Neu</button>
+  <button class="main" id="bExport">Export</button>
+  <button class="main" id="bLoad">Laden</button>
+  <button class="main" id="bCopy">Kopieren</button>
+  <button class="main" id="bCopyRot" title="Um 90° gedreht kopieren">↻<span class="lbl"> Quer</span></button>
+  <span class="sep"></span>
+  <button data-tool="move" class="on">✋<span class="lbl"> Bewegen</span></button>
+  <button data-tool="line">／ Linie</button>
+  <button data-tool="free">✎ Freihand</button>
+  <button data-tool="erase">⌫<span class="lbl"> Radierer</span></button>
+  <span class="sep"></span>
+  <button id="bDash">┄ Gestrichelt</button>
+  <button id="bArrow" class="on">➜<span class="lbl"> Pfeil</span></button>
+  <button id="bUndo">↶<span class="lbl"> Zurück</span></button>
+  <button id="bFull" title="Vollbild">⛶<span class="lbl"> Vollbild</span></button>
+  <button id="bHelp" title="Hilfe">?<span class="lbl"> Hilfe</span></button>
+</div>
+<div id="stage"><canvas id="cv"></canvas></div>
+<input type="file" id="file" accept="image/*">
+<div id="toast"></div>
+<div id="upd">Neue Version bereit – hier tippen zum Aktualisieren</div>
+<div id="help"><div id="helpBox">
+  <button class="close" id="helpClose">Schließen</button>
+  <h2>Volleyball Coach</h2>
+  <div class="ver">Version <span id="verTxt"></span></div>
+
+  <h3>Installation</h3>
+  <ul>
+    <li><b>iPad/iPhone:</b> Diese Adresse in Safari öffnen → Teilen □↑ → „Zum Home-Bildschirm“
+      (bei neueren Geräten „Als Web-App öffnen“ eingeschaltet lassen) → Hinzufügen. Danach nur noch über das Symbol starten.</li>
+    <li><b>Android:</b> Adresse in Chrome öffnen → ⋮ → „App installieren“ bzw. „Zum Startbildschirm hinzufügen“.</li>
+    <li><b>Mac:</b> Safari → Ablage → „Zum Dock hinzufügen“ (ab macOS Sonoma) oder als Lesezeichen speichern.</li>
+    <li>Nach dem ersten Öffnen läuft die App auch <b>ohne Internet</b>.</li>
+    <li><b>Neue Version:</b> App mit Internet öffnen → grüne Leiste „Neue Version bereit“ antippen.</li>
+  </ul>
+
+  <h3>Bedienung in Kürze</h3>
+  <ul>
+    <li><b>Spieler, Ball, Ballwagen, Korb</b> aus der linken (blau) oder rechten (rot) Leiste aufs Feld ziehen.
+      Zurück in die Leiste ziehen = löschen.</li>
+    <li><b>✋ Bewegen:</b> Spieler und Gegenstände verschieben.</li>
+    <li><b>／ Linie</b> und <b>✎ Freihand</b> zeichnen. <b>┄ Gestrichelt</b> und <b>➜ Pfeil</b> sind Schalter (gelb = an).</li>
+    <li><b>⌫ Radierer:</b> Linien und Gegenstände antippen oder überstreichen.</li>
+    <li><b>↶ Zurück</b> macht den letzten Schritt rückgängig – auch nach „Neu“.</li>
+    <li><b>Export</b> speichert ein JPG (iPad/iPhone/Android: Teilen-Menü, z. B. „In Dateien sichern“).
+      Mit <b>Laden</b> lässt sich die Aufstellung daraus wieder bearbeiten.</li>
+    <li><b>Kopieren</b> legt das Bild in die Zwischenablage, <b>↻ Quer</b> um 90° gedreht.</li>
+  </ul>
+
+  <h3>Datenschutz</h3>
+  <p>Alle Aufstellungen bleiben nur auf diesem Gerät (im Speicher des Browsers). Die App überträgt keine Eingaben,
+    setzt keine Cookies und verwendet kein Tracking.</p>
+  <p>Die App wird über GitHub Pages (GitHub Inc.) bereitgestellt. Beim Aufruf verarbeitet GitHub technisch
+    notwendige Daten wie die IP-Adresse; Einzelheiten in der Datenschutzerklärung von GitHub.</p>
+
+  <h3>Haftungsausschluss</h3>
+  <p>Die App wird kostenlos und ohne Gewähr bereitgestellt. Für Fehler, Datenverlust oder Folgen der Nutzung
+    wird keine Haftung übernommen. Wichtige Aufstellungen bitte als Bild exportieren.</p>
+
+  <h3>Über diese App</h3>
+  <p>Private, kostenlose App ohne Werbung. Kontakt und Rückmeldungen: github.com/app-laden</p>
+</div></div>
+<div id="ov"><img id="ovImg" alt="Aufstellung"><p>Bild gedrückt halten (iPad) bzw. Rechtsklick (Mac) → „Kopieren“</p><button id="ovClose">Schließen</button></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Welt (Meter) ----------
+  // Spielfeld 9 x 18 m, Netz bei y = 9. Sichtbereich inkl. Freizone.
+  var VX0 = -1.2, VY0 = -2.2, VW = 11.4, VH = 22.4;
+  var PR = 0.6;   // Spielerradius (m)
+  var BR = 0.38;  // Ballradius (m)
+  // Radius je Objekttyp (m) – für Treffer, Rand und Zeichnen
+  var RAD = { player: 0.6, ball: 0.38, cart: 0.8, basket: 0.55 };
+  var labelRot = 0; // Beschriftung beim gedrehten Kopieren aufrecht halten
+  function isItem(o) { return RAD.hasOwnProperty(o.type); }
+  var LABELS = ['Z', 'D', 'AA', 'MB', 'L'];
+  var COLORS = ['#1f5fbf', '#d0342c'];
+  var VERSION = '2.0';
+  var MAGIC = [86, 66, 67, 49]; // "VBC1" – Kennung der Aufstellungsdaten im JPG
+
+  var state = { objects: [], bg: null };
+  var bgImg = null;
+  var tool = 'move';
+  var arrows = true;
+  var dashed = false;
+  var history = [];
+
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var stage = document.getElementById('stage');
+  var L = null;
+
+  // ---------- Layout ----------
+  function layout() {
+    var W = stage.clientWidth, H = stage.clientHeight;
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var P = Math.max(58, Math.min(95, W * 0.085));
+    var s = Math.min((W - 2 * P - 6) / VW, (H - 4) / VH);
+    var ox = (W - VW * s) / 2, oy = (H - VH * s) / 2;
+    L = { W: W, H: H, P: P, s: s, ox: ox, oy: oy, pal: buildPalette(W, H, P) };
+    render();
+  }
+
+  function buildPalette(W, H, P) {
+    var items = [], n = LABELS.length + 3;
+    var sp = Math.min(76, (H - 16) / n);
+    var r = Math.min(24, sp * 0.38, P * 0.36);
+    var y0 = H / 2 - sp * (n - 1) / 2;
+    for (var t = 0; t < 2; t++) {
+      var cx = t === 0 ? P / 2 : W - P / 2;
+      for (var i = 0; i < LABELS.length; i++) {
+        items.push({ type: 'player', team: t, label: LABELS[i], x: cx, y: y0 + i * sp, r: r });
+      }
+      items.push({ type: 'ball', x: cx, y: y0 + LABELS.length * sp, r: r * 0.75 });
+      items.push({ type: 'cart', x: cx, y: y0 + (LABELS.length + 1) * sp, r: r * 1.05 });
+      items.push({ type: 'basket', x: cx, y: y0 + (LABELS.length + 2) * sp, r: r * 0.9 });
+    }
+    return items;
+  }
+
+  // ---------- Zeichnen ----------
+  function drawPlayer(c, x, y, r, team, label) {
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2);
+    c.fillStyle = COLORS[team]; c.fill();
+    c.lineWidth = Math.max(1.5, r * 0.12); c.strokeStyle = '#fff'; c.stroke();
+    c.fillStyle = '#fff';
+    c.font = 'bold ' + Math.round(r * 0.85) + 'px -apple-system, Helvetica, Arial, sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    if (labelRot) {
+      c.save(); c.translate(x, y); c.rotate(labelRot); c.fillText(label, 0, r * 0.04); c.restore();
+    } else c.fillText(label, x, y + r * 0.04);
+  }
+
+  function drawBall(c, x, y, r) {
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2);
+    c.fillStyle = '#ffd23f'; c.fill();
+    c.save(); c.clip();
+    c.strokeStyle = '#1d4fa3'; c.lineWidth = Math.max(1, r * 0.16);
+    c.beginPath(); c.arc(x - r * 0.9, y - r * 0.9, r * 1.25, 0, Math.PI * 2); c.stroke();
+    c.beginPath(); c.arc(x + r * 1.1, y - r * 0.2, r * 1.0, 0, Math.PI * 2); c.stroke();
+    c.beginPath(); c.arc(x - r * 0.1, y + r * 1.3, r * 0.95, 0, Math.PI * 2); c.stroke();
+    c.restore();
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2);
+    c.lineWidth = Math.max(1, r * 0.1); c.strokeStyle = '#333'; c.stroke();
+  }
+
+  function drawCart(c, x, y, r) {
+    var w = r * 1.6, h = w, x0 = x - w / 2, y0 = y - h / 2;
+    // Räder
+    c.fillStyle = '#222';
+    var wr = r * 0.17, pts = [[x0, y0], [x0 + w, y0], [x0, y0 + h], [x0 + w, y0 + h]];
+    for (var i = 0; i < 4; i++) { c.beginPath(); c.arc(pts[i][0], pts[i][1], wr, 0, Math.PI * 2); c.fill(); }
+    // Korb des Wagens
+    c.fillStyle = '#c9d0d6'; c.fillRect(x0, y0, w, h);
+    c.strokeStyle = '#4a5560'; c.lineWidth = Math.max(1.5, r * 0.1); c.strokeRect(x0, y0, w, h);
+    // Bälle
+    var br = r * 0.24;
+    for (var row = 0; row < 3; row++) for (var col = 0; col < 3; col++) {
+      drawBall(c, x0 + w * (col + 0.5) / 3, y0 + h * (row + 0.5) / 3, br);
+    }
+  }
+
+  function drawBasket(c, x, y, r) {
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2);
+    c.fillStyle = '#b07a3a'; c.fill();
+    c.save(); c.clip();
+    c.strokeStyle = '#7a5022'; c.lineWidth = Math.max(1, r * 0.07);
+    for (var k = -4; k <= 4; k++) {
+      c.beginPath(); c.moveTo(x + k * r * 0.4 - r, y - r); c.lineTo(x + k * r * 0.4 + r, y + r); c.stroke();
+      c.beginPath(); c.moveTo(x + k * r * 0.4 + r, y - r); c.lineTo(x + k * r * 0.4 - r, y + r); c.stroke();
+    }
+    c.restore();
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2);
+    c.strokeStyle = '#5a3a15'; c.lineWidth = Math.max(2, r * 0.16); c.stroke();
+  }
+
+  function drawItem(c, o, x, y, r) {
+    if (o.type === 'player') drawPlayer(c, x, y, r, o.team, o.label);
+    else if (o.type === 'ball') drawBall(c, x, y, r);
+    else if (o.type === 'cart') drawCart(c, x, y, r);
+    else if (o.type === 'basket') drawBasket(c, x, y, r);
+  }
+
+  function renderScene(c, T, extra) {
+    var s = T.s;
+    function X(x) { return T.ox + (x - VX0) * s; }
+    function Y(y) { return T.oy + (y - VY0) * s; }
+
+    if (bgImg) {
+      c.fillStyle = '#fff'; c.fillRect(X(VX0), Y(VY0), VW * s, VH * s);
+      var k = Math.min(VW * s / bgImg.width, VH * s / bgImg.height);
+      var w = bgImg.width * k, h = bgImg.height * k;
+      c.drawImage(bgImg, X(VX0) + (VW * s - w) / 2, Y(VY0) + (VH * s - h) / 2, w, h);
+    } else {
+      drawCourt(c, X, Y, s);
+    }
+
+    var list = state.objects.slice();
+    if (extra && extra.cur) list.push(extra.cur);
+    // erst Linien, dann Spieler/Bälle
+    for (var i = 0; i < list.length; i++) {
+      var o = list[i];
+      if (o.type === 'line' || o.type === 'free') drawStroke(c, o, X, Y, s);
+    }
+    // Wagen/Körbe unten, darüber Bälle und Spieler
+    for (i = 0; i < list.length; i++) {
+      o = list[i];
+      if (o.type === 'cart' || o.type === 'basket') drawItem(c, o, X(o.x), Y(o.y), RAD[o.type] * s);
+    }
+    for (i = 0; i < list.length; i++) {
+      o = list[i];
+      if (o.type === 'player' || o.type === 'ball') drawItem(c, o, X(o.x), Y(o.y), RAD[o.type] * s);
+    }
+    if (extra && extra.drag) {
+      o = extra.drag;
+      c.globalAlpha = 0.85;
+      drawItem(c, o, X(o.x), Y(o.y), RAD[o.type] * s);
+      c.globalAlpha = 1;
+    }
+  }
+
+  function drawCourt(c, X, Y, s) {
+    // Freizone
+    c.fillStyle = '#3f80b8';
+    c.fillRect(X(VX0), Y(VY0), VW * s, VH * s);
+    // Spielfeld
+    c.fillStyle = '#e9a25f';
+    c.fillRect(X(0), Y(0), 9 * s, 18 * s);
+
+    var lw = Math.max(2, 0.06 * s);
+    c.strokeStyle = '#fff'; c.lineWidth = lw; c.lineCap = 'butt';
+    c.setLineDash([]);
+    c.strokeRect(X(0), Y(0), 9 * s, 18 * s);          // Seiten- und Grundlinien
+    line(c, X(0), Y(9), X(9), Y(9));                  // Mittellinie
+    line(c, X(0), Y(6), X(9), Y(6));                  // 3-m-Linie oben
+    line(c, X(0), Y(12), X(9), Y(12));                // 3-m-Linie unten
+
+    // gestrichelte Verlängerung der 3-m-Linien in die Freizone
+    c.lineWidth = lw * 0.8;
+    var ys = [6, 12];
+    for (var i = 0; i < 2; i++) {
+      for (var d = 0; d < 4; d++) {
+        var a = 0.15 + d * 0.25;
+        line(c, X(-a), Y(ys[i]), X(-a - 0.12), Y(ys[i]));
+        line(c, X(9 + a), Y(ys[i]), X(9 + a + 0.12), Y(ys[i]));
+      }
+    }
+    // Aufschlagzonen-Markierungen hinter den Grundlinien
+    c.lineWidth = lw;
+    line(c, X(0), Y(-0.2), X(0), Y(-0.65));
+    line(c, X(9), Y(-0.2), X(9), Y(-0.65));
+    line(c, X(0), Y(18.2), X(0), Y(18.65));
+    line(c, X(9), Y(18.2), X(9), Y(18.65));
+
+    // Netz
+    c.strokeStyle = '#1b1b1b'; c.lineWidth = Math.max(4, 0.16 * s);
+    line(c, X(-0.6), Y(9), X(9.6), Y(9));
+    c.strokeStyle = '#ffffff'; c.lineWidth = Math.max(1.5, 0.05 * s);
+    line(c, X(-0.6), Y(9), X(9.6), Y(9));
+    c.fillStyle = '#1b1b1b';
+    c.beginPath(); c.arc(X(-0.75), Y(9), Math.max(3, 0.18 * s), 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(X(9.75), Y(9), Math.max(3, 0.18 * s), 0, Math.PI * 2); c.fill();
+  }
+
+  function line(c, x1, y1, x2, y2) { c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); }
+
+  function drawStroke(c, o, X, Y, s) {
+    var p = o.pts;
+    if (!p || p.length < 2) return;
+    var lw = Math.max(2, 0.08 * s);
+    c.strokeStyle = '#111'; c.fillStyle = '#111';
+    c.lineWidth = lw; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.setLineDash(o.dash ? [0.35 * s, 0.28 * s] : []);
+    c.beginPath(); c.moveTo(X(p[0][0]), Y(p[0][1]));
+    for (var i = 1; i < p.length; i++) c.lineTo(X(p[i][0]), Y(p[i][1]));
+    c.stroke();
+    c.setLineDash([]);
+    if (o.arrow) {
+      var e = p[p.length - 1], b = p[0];
+      // Richtung: Punkt etwa 0,6 m vor dem Ende
+      for (i = p.length - 2; i >= 0; i--) {
+        b = p[i];
+        if (Math.hypot(e[0] - b[0], e[1] - b[1]) > 0.6) break;
+      }
+      var ang = Math.atan2(e[1] - b[1], e[0] - b[0]);
+      var hl = Math.max(10, 0.5 * s), hw = 0.5;
+      var ex = X(e[0]), ey = Y(e[1]);
+      c.beginPath(); c.moveTo(ex, ey);
+      c.lineTo(ex - hl * Math.cos(ang - hw), ey - hl * Math.sin(ang - hw));
+      c.lineTo(ex - hl * Math.cos(ang + hw), ey - hl * Math.sin(ang + hw));
+      c.closePath(); c.fill();
+    }
+  }
+
+  var temp = { cur: null, drag: null };
+
+  function render() {
+    if (!L) return;
+    ctx.clearRect(0, 0, L.W, L.H);
+    // Seitenleisten
+    ctx.fillStyle = '#f7f9fb';
+    ctx.fillRect(0, 0, L.P, L.H);
+    ctx.fillRect(L.W - L.P, 0, L.P, L.H);
+    ctx.fillStyle = '#cfd6dd';
+    ctx.fillRect(L.P, 0, 1, L.H);
+    ctx.fillRect(L.W - L.P - 1, 0, 1, L.H);
+
+    renderScene(ctx, L, temp);
+
+    for (var i = 0; i < L.pal.length; i++) {
+      var it = L.pal[i];
+      drawItem(ctx, it, it.x, it.y, it.r);
+    }
+  }
+
+  // ---------- Verlauf / Speichern ----------
+  function snapshot() { return { o: JSON.stringify(state.objects), bg: state.bg }; }
+  function pushHistory(snap) {
+    history.push(snap || snapshot());
+    if (history.length > 60) history.shift();
+  }
+  function undo() {
+    if (!history.length) return;
+    var h = history.pop();
+    state.objects = JSON.parse(h.o);
+    if (h.bg !== state.bg) setBg(h.bg);
+    commit();
+  }
+  function commit() {
+    try { localStorage.setItem('vbcoach_scene', JSON.stringify(state)); } catch (e) {
+      try { localStorage.setItem('vbcoach_scene', JSON.stringify({ objects: state.objects, bg: null })); } catch (e2) {}
+    }
+    render();
+  }
+  function setBg(d) {
+    state.bg = d || null; bgImg = null;
+    if (d) {
+      var img = new Image();
+      img.onload = function () { if (state.bg === d) { bgImg = img; render(); } };
+      img.src = d;
+    }
+  }
+
+  // ---------- Eingabe ----------
+  function pos(e) {
+    var r = cv.getBoundingClientRect();
+    return { sx: e.clientX - r.left, sy: e.clientY - r.top };
+  }
+  function toWorld(p) { return { x: (p.sx - L.ox) / L.s + VX0, y: (p.sy - L.oy) / L.s + VY0 }; }
+  function inPalette(sx) { return sx < L.P || sx > L.W - L.P; }
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function clampObj(o) {
+    var m = RAD[o.type] || PR;
+    o.x = r2(Math.max(VX0 + m, Math.min(VX0 + VW - m, o.x)));
+    o.y = r2(Math.max(VY0 + m, Math.min(VY0 + VH - m, o.y)));
+  }
+
+  function hitObject(w, tol) {
+    for (var i = state.objects.length - 1; i >= 0; i--) {
+      var o = state.objects[i];
+      if (!isItem(o)) continue;
+      var r = RAD[o.type] + tol;
+      if (Math.hypot(o.x - w.x, o.y - w.y) <= r) return i;
+    }
+    return -1;
+  }
+  function segDist(px, py, a, b) {
+    var dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+    var t = l2 ? ((px - a[0]) * dx + (py - a[1]) * dy) / l2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (a[0] + t * dx), py - (a[1] + t * dy));
+  }
+  function hitStroke(w, tol) {
+    for (var i = state.objects.length - 1; i >= 0; i--) {
+      var o = state.objects[i];
+      if (o.type !== 'line' && o.type !== 'free') continue;
+      var p = o.pts;
+      for (var j = 1; j < p.length; j++) if (segDist(w.x, w.y, p[j - 1], p[j]) <= tol) return i;
+    }
+    return -1;
+  }
+
+  var act = null; // aktuelle Geste
+  var pid = null;
+
+  cv.addEventListener('pointerdown', function (e) {
+    if (pid !== null) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    var p = pos(e), w = toWorld(p);
+    var touch = e.pointerType !== 'mouse';
+
+    // 1) aus der Seitenleiste ziehen
+    for (var i = 0; i < L.pal.length; i++) {
+      var it = L.pal[i];
+      if (Math.hypot(it.x - p.sx, it.y - p.sy) <= it.r + (touch ? 10 : 4)) {
+        var o = it.type === 'player'
+          ? { type: 'player', team: it.team, label: it.label, x: w.x, y: w.y }
+          : { type: it.type, x: w.x, y: w.y };
+        act = { kind: 'new', obj: o };
+        temp.drag = o;
+        start(e); render(); return;
+      }
+    }
+    if (inPalette(p.sx)) return;
+
+    if (tool === 'move') {
+      var idx = hitObject(w, touch ? 0.3 : 0.1);
+      if (idx >= 0) {
+        var ob = state.objects[idx];
+        act = { kind: 'move', obj: ob, dx: ob.x - w.x, dy: ob.y - w.y, snap: snapshot(), moved: false };
+        // nach oben holen
+        state.objects.splice(idx, 1); state.objects.push(ob);
+        start(e); render();
+      }
+    } else if (tool === 'line') {
+      temp.cur = { type: 'line', dash: dashed, arrow: arrows, pts: [[r2(w.x), r2(w.y)], [r2(w.x), r2(w.y)]] };
+      act = { kind: 'draw' }; start(e); render();
+    } else if (tool === 'free') {
+      temp.cur = { type: 'free', dash: dashed, arrow: arrows, pts: [[r2(w.x), r2(w.y)]] };
+      act = { kind: 'draw' }; start(e); render();
+    } else if (tool === 'erase') {
+      act = { kind: 'erase', snap: snapshot(), changed: false, touch: touch };
+      start(e); eraseAt(w);
+    }
+  });
+
+  function start(e) {
+    pid = e.pointerId;
+    try { cv.setPointerCapture(e.pointerId); } catch (x) {}
+  }
+
+  function eraseAt(w) {
+    var tol = act.touch ? 0.45 : 0.25;
+    var i = hitObject(w, tol - 0.15);
+    if (i < 0) i = hitStroke(w, tol);
+    if (i >= 0) {
+      state.objects.splice(i, 1);
+      if (!act.changed) { pushHistory(act.snap); act.changed = true; }
+      render();
+    }
+  }
+
+  cv.addEventListener('pointermove', function (e) {
+    if (pid === null || e.pointerId !== pid || !act) return;
+    e.preventDefault();
+    var p = pos(e), w = toWorld(p);
+    if (act.kind === 'new') {
+      act.obj.x = w.x; act.obj.y = w.y; render();
+    } else if (act.kind === 'move') {
+      act.obj.x = w.x + act.dx; act.obj.y = w.y + act.dy; act.moved = true; render();
+    } else if (act.kind === 'draw') {
+      var c = temp.cur;
+      if (c.type === 'line') { c.pts[1] = [r2(w.x), r2(w.y)]; render(); }
+      else {
+        var last = c.pts[c.pts.length - 1];
+        if (Math.hypot(w.x - last[0], w.y - last[1]) > 0.08) { c.pts.push([r2(w.x), r2(w.y)]); render(); }
+      }
+    } else if (act.kind === 'erase') {
+      eraseAt(w);
+    }
+  });
+
+  function finish(e, cancelled) {
+    if (pid === null || e.pointerId !== pid) return;
+    var p = pos(e);
+    if (act) {
+      if (act.kind === 'new') {
+        temp.drag = null;
+        if (!cancelled && !inPalette(p.sx)) {
+          pushHistory(); clampObj(act.obj); state.objects.push(act.obj);
+        }
+        commit();
+      } else if (act.kind === 'move') {
+        if (cancelled) { state.objects = JSON.parse(act.snap.o); }
+        else if (inPalette(p.sx)) {
+          // zurück in die Seitenleiste = löschen
+          state.objects.splice(state.objects.indexOf(act.obj), 1);
+          pushHistory(act.snap);
+        } else if (act.moved) {
+          clampObj(act.obj); pushHistory(act.snap);
+        }
+        commit();
+      } else if (act.kind === 'draw') {
+        var c = temp.cur; temp.cur = null;
+        if (!cancelled && c && c.pts.length >= 2) {
+          var a = c.pts[0], b = c.pts[c.pts.length - 1], len = 0;
+          for (var i = 1; i < c.pts.length; i++) len += Math.hypot(c.pts[i][0] - c.pts[i - 1][0], c.pts[i][1] - c.pts[i - 1][1]);
+          if (len > 0.3 || Math.hypot(b[0] - a[0], b[1] - a[1]) > 0.3) { pushHistory(); state.objects.push(c); }
+        }
+        commit();
+      } else if (act.kind === 'erase') {
+        commit();
+      }
+    }
+    act = null; pid = null;
+  }
+  cv.addEventListener('pointerup', function (e) { finish(e, false); });
+  cv.addEventListener('pointercancel', function (e) { finish(e, true); });
+
+  // ---------- Werkzeugleiste ----------
+  var toolBtns = document.querySelectorAll('[data-tool]');
+  for (var i = 0; i < toolBtns.length; i++) {
+    toolBtns[i].addEventListener('click', function () {
+      tool = this.getAttribute('data-tool');
+      for (var j = 0; j < toolBtns.length; j++) toolBtns[j].classList.toggle('on', toolBtns[j] === this);
+      cv.style.cursor = tool === 'move' ? 'default' : 'crosshair';
+    });
+  }
+  document.getElementById('bDash').addEventListener('click', function () {
+    dashed = !dashed; this.classList.toggle('on', dashed);
+  });
+  document.getElementById('bArrow').addEventListener('click', function () {
+    arrows = !arrows; this.classList.toggle('on', arrows);
+  });
+  document.getElementById('bUndo').addEventListener('click', undo);
+  var root = document.documentElement;
+  var bFull = document.getElementById('bFull');
+  var fsReq = root.requestFullscreen || root.webkitRequestFullscreen;
+  function fsEl() { return document.fullscreenElement || document.webkitFullscreenElement; }
+  var standalone = navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  if (!fsReq || standalone) bFull.style.display = 'none';
+  bFull.addEventListener('click', function () {
+    if (fsEl()) {
+      (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    } else {
+      try { var r = fsReq.call(root); if (r && r.catch) r.catch(function () {}); } catch (e) {}
+    }
+  });
+  function fsChange() { bFull.classList.toggle('on', !!fsEl()); setTimeout(layout, 100); }
+  document.addEventListener('fullscreenchange', fsChange);
+  document.addEventListener('webkitfullscreenchange', fsChange);
+  document.getElementById('bNew').addEventListener('click', function () {
+    pushHistory();
+    state.objects = []; setBg(null);
+    commit();
+  });
+  document.getElementById('bExport').addEventListener('click', exportJPG);
+  document.getElementById('bCopy').addEventListener('click', function () { copyImage(false); });
+  document.getElementById('bCopyRot').addEventListener('click', function () { copyImage(true); });
+  document.getElementById('ovClose').addEventListener('click', function () {
+    document.getElementById('ov').style.display = 'none';
+  });
+  var fileIn = document.getElementById('file');
+  document.getElementById('bLoad').addEventListener('click', function () { fileIn.value = ''; fileIn.click(); });
+  fileIn.addEventListener('change', function () {
+    if (fileIn.files && fileIn.files[0]) loadFile(fileIn.files[0]);
+  });
+  document.addEventListener('keydown', function (e) {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); undo(); }
+  });
+  document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+
+  // ---------- Export (JPG mit eingebetteter Aufstellung) ----------
+  // ---------- In Zwischenablage kopieren ----------
+  function renderPNGCanvas(rot) {
+    var s = 50, w = VW * s, h = VH * s, c = document.createElement('canvas');
+    if (!rot) {
+      c.width = w; c.height = h;
+      renderScene(c.getContext('2d'), { s: s, ox: 0, oy: 0 }, null);
+      return c;
+    }
+    // um 90° im Uhrzeigersinn gedreht (Netz senkrecht), Kürzel bleiben lesbar
+    c.width = h; c.height = w;
+    var x = c.getContext('2d');
+    x.translate(h, 0); x.rotate(Math.PI / 2);
+    labelRot = -Math.PI / 2;
+    try { renderScene(x, { s: s, ox: 0, oy: 0 }, null); } finally { labelRot = 0; }
+    return c;
+  }
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.style.opacity = '1';
+    clearTimeout(toast.tm); toast.tm = setTimeout(function () { t.style.opacity = '0'; }, 1800);
+  }
+  function showOverlay(c) {
+    document.getElementById('ovImg').src = c.toDataURL('image/png');
+    document.getElementById('ov').style.display = 'flex';
+  }
+  function copyImage(rot) {
+    var c = renderPNGCanvas(rot === true);
+    if (!(navigator.clipboard && navigator.clipboard.write && window.ClipboardItem)) { showOverlay(c); return; }
+    var blobPromise = new Promise(function (res, rej) {
+      c.toBlob(function (b) { b ? res(b) : rej(new Error('blob')); }, 'image/png');
+    });
+    var p;
+    try {
+      // Safari verlangt das Promise direkt im ClipboardItem (sonst verfällt die Klick-Berechtigung)
+      p = navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })]);
+    } catch (e) {
+      p = blobPromise.then(function (b) { return navigator.clipboard.write([new ClipboardItem({ 'image/png': b })]); });
+    }
+    p.then(function () { toast('Bild in die Zwischenablage kopiert'); })
+     .catch(function () {
+       blobPromise.then(function (b) { return navigator.clipboard.write([new ClipboardItem({ 'image/png': b })]); })
+         .then(function () { toast('Bild in die Zwischenablage kopiert'); })
+         .catch(function () { showOverlay(c); });
+     });
+  }
+
+  function exportJPG() {
+    var s = 50;
+    var c = document.createElement('canvas');
+    c.width = VW * s; c.height = VH * s;
+    var x = c.getContext('2d');
+    renderScene(x, { s: s, ox: 0, oy: 0 }, null);
+    var url = c.toDataURL('image/jpeg', 0.92);
+    var bin = atob(url.split(',')[1]);
+    var jpg = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) jpg[i] = bin.charCodeAt(i);
+    var data = JSON.stringify({ v: 1, objects: state.objects, bg: state.bg });
+    var out = embed(jpg, new TextEncoder().encode(data));
+    var blob = new Blob([out], { type: 'image/jpeg' });
+    var d = new Date();
+    function z(n) { return (n < 10 ? '0' : '') + n; }
+    var name = 'Volleyball_' + d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) +
+      '_' + z(d.getHours()) + z(d.getMinutes()) + '.jpg';
+    saveBlob(blob, name);
+  }
+
+  function downloadBlob(blob, name) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 5000);
+  }
+
+  // iPad/iPhone/Android: Teilen-Menü (funktioniert auch in der Web-App), sonst Download
+  function saveBlob(blob, name) {
+    var touch = navigator.maxTouchPoints > 1 || /Android|iPhone|iPad/.test(navigator.userAgent);
+    if (touch && navigator.share && navigator.canShare && window.File) {
+      try {
+        var f = new File([blob], name, { type: blob.type });
+        if (navigator.canShare({ files: [f] })) {
+          navigator.share({ files: [f] }).catch(function (e) {
+            if (!e || e.name !== 'AbortError') downloadBlob(blob, name);
+          });
+          return;
+        }
+      } catch (e) {}
+    }
+    downloadBlob(blob, name);
+  }
+
+  function embed(jpg, data) {
+    var CH = 65000, segs = [], total = 0;
+    for (var i = 0; i < data.length || i === 0; i += CH) {
+      var chunk = data.subarray(i, i + CH);
+      var len = 2 + 4 + chunk.length;
+      var seg = new Uint8Array(len + 2);
+      seg[0] = 0xFF; seg[1] = 0xFE; seg[2] = len >> 8; seg[3] = len & 255;
+      seg.set(MAGIC, 4); seg.set(chunk, 8);
+      segs.push(seg); total += seg.length;
+      if (!data.length) break;
+    }
+    var at = 2;
+    if (jpg[2] === 0xFF && jpg[3] === 0xE0) at = 4 + ((jpg[4] << 8) | jpg[5]);
+    var out = new Uint8Array(jpg.length + total);
+    out.set(jpg.subarray(0, at), 0);
+    var o = at;
+    for (i = 0; i < segs.length; i++) { out.set(segs[i], o); o += segs[i].length; }
+    out.set(jpg.subarray(at), o);
+    return out;
+  }
+
+  function extract(b) {
+    if (b[0] !== 0xFF || b[1] !== 0xD8) return null;
+    var i = 2, parts = [], total = 0;
+    while (i + 4 <= b.length && b[i] === 0xFF) {
+      var m = b[i + 1];
+      if (m === 0xFF) { i++; continue; }
+      if (m === 0xDA || m === 0xD9) break;
+      var len = (b[i + 2] << 8) | b[i + 3];
+      if (m === 0xFE && len >= 6 && b[i + 4] === MAGIC[0] && b[i + 5] === MAGIC[1] &&
+          b[i + 6] === MAGIC[2] && b[i + 7] === MAGIC[3]) {
+        var part = b.subarray(i + 8, i + 2 + len);
+        parts.push(part); total += part.length;
+      }
+      i += 2 + len;
+    }
+    if (!parts.length) return null;
+    var all = new Uint8Array(total), o = 0;
+    for (var k = 0; k < parts.length; k++) { all.set(parts[k], o); o += parts[k].length; }
+    return new TextDecoder().decode(all);
+  }
+
+  // ---------- Laden ----------
+  function loadFile(f) {
+    var rd = new FileReader();
+    rd.onload = function () {
+      var bytes = new Uint8Array(rd.result);
+      var txt = null;
+      try { txt = extract(bytes); } catch (e) { txt = null; }
+      if (txt) {
+        try {
+          var d = JSON.parse(txt);
+          pushHistory();
+          state.objects = d.objects || [];
+          setBg(d.bg || null);
+          commit();
+          return;
+        } catch (e) { /* weiter als normales Bild */ }
+      }
+      // fremdes Bild -> als Hintergrund
+      var url = URL.createObjectURL(f);
+      var img = new Image();
+      img.onload = function () {
+        var max = 1400, k = Math.min(1, max / Math.max(img.width, img.height));
+        var c = document.createElement('canvas');
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        var x = c.getContext('2d');
+        x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+        x.drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        pushHistory();
+        state.objects = [];
+        setBg(c.toDataURL('image/jpeg', 0.85));
+        commit();
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); alert('Datei konnte nicht geladen werden.'); };
+      img.src = url;
+    };
+    rd.readAsArrayBuffer(f);
+  }
+
+  // ---------- Start ----------
+  try {
+    var saved = JSON.parse(localStorage.getItem('vbcoach_scene') || 'null');
+    if (saved && saved.objects) { state.objects = saved.objects; setBg(saved.bg || null); }
+  } catch (e) {}
+
+  window.addEventListener('resize', function () { setTimeout(layout, 50); });
+  window.addEventListener('orientationchange', function () { setTimeout(layout, 300); });
+  layout();
+
+  // ---------- Hilfe ----------
+  document.getElementById('verTxt').textContent = VERSION;
+  var help = document.getElementById('help');
+  document.getElementById('bHelp').addEventListener('click', function () { help.style.display = 'flex'; });
+  document.getElementById('helpClose').addEventListener('click', function () { help.style.display = 'none'; });
+  help.addEventListener('click', function (e) { if (e.target === help) help.style.display = 'none'; });
+
+  // ---------- Offline-Betrieb und Updates (GitHub Pages) ----------
+  // Startet immer aus dem Speicher. Liegt eine neue Version bei GitHub, wird sie im Hintergrund
+  // geladen und die grüne Leiste erscheint. Erst ein Tipp darauf lädt die App neu.
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    var reloading = false;
+    var upd = document.getElementById('upd');
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
+      function offer() { if (reg.waiting && navigator.serviceWorker.controller) upd.style.display = 'block'; }
+      function watch(w) { if (w) w.addEventListener('statechange', function () { if (w.state === 'installed') offer(); }); }
+      offer();
+      watch(reg.installing);
+      reg.addEventListener('updatefound', function () { watch(reg.installing); });
+      upd.addEventListener('click', function () {
+        if (reg.waiting) { reloading = true; reg.waiting.postMessage('skipWaiting'); }
+        else location.reload();
+      });
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') reg.update().catch(function () {});
+      });
+    }).catch(function () {});
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (reloading) location.reload();
+    });
+  }
+})();
+</script>
+</body>
+</html>
