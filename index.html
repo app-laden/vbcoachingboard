@@ -107,7 +107,7 @@
     <li><b>／ Linie</b> und <b>✎ Freihand</b> zeichnen. <b>┄ Gestrichelt</b> und <b>➜ Pfeil</b> sind Schalter (gelb = an).</li>
     <li><b>⌫ Radierer:</b> Linien und Gegenstände antippen oder überstreichen.</li>
     <li><b>Größe S/M/L</b> (Knopf mit dem Buchstaben) schaltet die Größe aller Spieler, Bälle, Ballwagen und Körbe
-      auf dem Feld um: S = 50 %, M = 75 %, L = 100 %. Die Größe wird mit der Aufstellung gespeichert.</li>
+      auf dem Feld um: S = 75 %, M = 87 %, L = 100 %. Die Größe wird mit der Aufstellung gespeichert.</li>
     <li><b># Nummern</b> (gelb = an) zeigt statt der Positionen Nummern. Jeder neue Spieler bekommt die nächste
       Nummer seiner Farbe; in der Seitenleiste steht dann nur ein Spieler mit dieser Nummer. Ausschalten zeigt
       wieder die Positionen (Spieler, die als Nummer angelegt wurden, behalten ihre Nummer).</li>
@@ -143,13 +143,13 @@
   var BR = 0.38;  // Ballradius (m)
   // Radius je Objekttyp (m) – für Treffer, Rand und Zeichnen
   var RAD = { player: 0.6, ball: 0.38, cart: 0.8, basket: 0.55 };
-  var SIZES = { S: 0.5, M: 0.75, L: 1 }; // Größe von Spielern und Material auf dem Feld
+  var SIZES = { S: 0.75, M: 0.87, L: 1 }; // Größe von Spielern und Material auf dem Feld
   function rad(type) { return RAD[type] * (SIZES[state.size] || 1); }
   var labelRot = 0; // Beschriftung beim gedrehten Kopieren aufrecht halten
   function isItem(o) { return RAD.hasOwnProperty(o.type); }
   var LABELS = ['Z', 'D', 'AA', 'MB', 'L'];
   var COLORS = ['#1f5fbf', '#d0342c'];
-  var VERSION = '2.2';
+  var VERSION = '2.3';
   var MAGIC = [86, 66, 67, 49]; // "VBC1" – Kennung der Aufstellungsdaten im JPG
 
   var state = { objects: [], bg: null, size: 'L', numbers: false, sv: 2 };

@@ -1,6 +1,6 @@
 // Volleyball Coach – Service Worker für GitHub Pages
 // Bei jeder neuen Version VERSION hier UND in index.html erhöhen.
-var VERSION = '2.2';
+var VERSION = '2.3';
 var CACHE = 'vbcoach-' + VERSION;
 var FILES = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
