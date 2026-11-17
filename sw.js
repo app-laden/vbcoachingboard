@@ -1,12 +1,18 @@
 // Volleyball Coach – Service Worker für GitHub Pages
 // Bei jeder neuen Version VERSION hier UND in index.html erhöhen.
-var VERSION = '2.0';
+var VERSION = '2.2';
 var CACHE = 'vbcoach-' + VERSION;
 var FILES = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
+  // Jede Datei frisch vom Server holen (nicht aus dem Browser-Zwischenspeicher)
   e.waitUntil(caches.open(CACHE).then(function (c) {
-    return c.addAll(FILES.map(function (f) { return new Request(f, { cache: 'reload' }); }));
+    return Promise.all(FILES.map(function (f) {
+      return fetch(new Request(f, { cache: 'reload' })).then(function (res) {
+        if (!res.ok) throw new Error('Laden fehlgeschlagen: ' + f);
+        return c.put(f, res);
+      });
+    }));
   }));
   // kein skipWaiting: die neue Version wartet, bis die grüne Leiste angetippt wird
 });

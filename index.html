@@ -16,7 +16,8 @@
   html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#e9edf1;
     font-family:-apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
     -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
-  body { position:fixed; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; }
+  body { position:fixed; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
   #bar { display:flex; flex-wrap:nowrap; align-items:center; gap:3px; padding:3px 5px;
     background:#fff; border-bottom:1px solid #cfd6dd; overflow-x:auto; -webkit-overflow-scrolling:touch; }
   #bar button { flex:0 0 auto; font-size:13px; height:30px; padding:0 7px; border:1px solid #b9c2cb;
@@ -32,7 +33,7 @@
   /* iPad zeigt im Vollbild oben links ein Schließen-Symbol – Platz dafür lassen */
   :-webkit-full-screen #bar { padding-left:52px; }
   :fullscreen #bar { padding-left:52px; }
-  @media (max-width: 900px) { #bar .lbl { display:none; } #bar button { padding:0 8px; } }
+  @media (max-width: 1100px) { #bar .lbl { display:none; } #bar button { padding:0 7px; } }
   #toast { position:fixed; left:50%; top:46px; transform:translateX(-50%); background:#1b2733; color:#fff;
     padding:8px 14px; border-radius:8px; font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:20; }
   #ov { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.75); display:none;
@@ -71,8 +72,10 @@
   <button data-tool="free">✎ Freihand</button>
   <button data-tool="erase">⌫<span class="lbl"> Radierer</span></button>
   <span class="sep"></span>
-  <button id="bDash">┄ Gestrichelt</button>
+  <button id="bDash">┄<span class="lbl"> Gestrichelt</span></button>
   <button id="bArrow" class="on">➜<span class="lbl"> Pfeil</span></button>
+  <button id="bNum" title="Spieler durchnummerieren statt Positionen">#<span class="lbl"> Nummern</span></button>
+  <button id="bSize" title="Größe von Spielern und Material (S, M, L)"><span class="lbl">Größe </span><b id="szTxt">L</b></button>
   <button id="bUndo">↶<span class="lbl"> Zurück</span></button>
   <button id="bFull" title="Vollbild">⛶<span class="lbl"> Vollbild</span></button>
   <button id="bHelp" title="Hilfe">?<span class="lbl"> Hilfe</span></button>
@@ -103,6 +106,11 @@
     <li><b>✋ Bewegen:</b> Spieler und Gegenstände verschieben.</li>
     <li><b>／ Linie</b> und <b>✎ Freihand</b> zeichnen. <b>┄ Gestrichelt</b> und <b>➜ Pfeil</b> sind Schalter (gelb = an).</li>
     <li><b>⌫ Radierer:</b> Linien und Gegenstände antippen oder überstreichen.</li>
+    <li><b>Größe S/M/L</b> (Knopf mit dem Buchstaben) schaltet die Größe aller Spieler, Bälle, Ballwagen und Körbe
+      auf dem Feld um: S = 50 %, M = 75 %, L = 100 %. Die Größe wird mit der Aufstellung gespeichert.</li>
+    <li><b># Nummern</b> (gelb = an) zeigt statt der Positionen Nummern. Jeder neue Spieler bekommt die nächste
+      Nummer seiner Farbe; in der Seitenleiste steht dann nur ein Spieler mit dieser Nummer. Ausschalten zeigt
+      wieder die Positionen (Spieler, die als Nummer angelegt wurden, behalten ihre Nummer).</li>
     <li><b>↶ Zurück</b> macht den letzten Schritt rückgängig – auch nach „Neu“.</li>
     <li><b>Export</b> speichert ein JPG (iPad/iPhone/Android: Teilen-Menü, z. B. „In Dateien sichern“).
       Mit <b>Laden</b> lässt sich die Aufstellung daraus wieder bearbeiten.</li>
@@ -135,14 +143,16 @@
   var BR = 0.38;  // Ballradius (m)
   // Radius je Objekttyp (m) – für Treffer, Rand und Zeichnen
   var RAD = { player: 0.6, ball: 0.38, cart: 0.8, basket: 0.55 };
+  var SIZES = { S: 0.5, M: 0.75, L: 1 }; // Größe von Spielern und Material auf dem Feld
+  function rad(type) { return RAD[type] * (SIZES[state.size] || 1); }
   var labelRot = 0; // Beschriftung beim gedrehten Kopieren aufrecht halten
   function isItem(o) { return RAD.hasOwnProperty(o.type); }
   var LABELS = ['Z', 'D', 'AA', 'MB', 'L'];
   var COLORS = ['#1f5fbf', '#d0342c'];
-  var VERSION = '2.0';
+  var VERSION = '2.2';
   var MAGIC = [86, 66, 67, 49]; // "VBC1" – Kennung der Aufstellungsdaten im JPG
 
-  var state = { objects: [], bg: null };
+  var state = { objects: [], bg: null, size: 'L', numbers: false, sv: 2 };
   var bgImg = null;
   var tool = 'move';
   var arrows = true;
@@ -169,18 +179,22 @@
   }
 
   function buildPalette(W, H, P) {
-    var items = [], n = LABELS.length + 3;
-    var sp = Math.min(76, (H - 16) / n);
+    var items = [], nMax = LABELS.length + 3;
+    var sp = Math.min(76, (H - 16) / nMax);
     var r = Math.min(24, sp * 0.38, P * 0.36);
+    // Nummern-Modus: nur ein Spieler je Farbe (zeigt die nächste Nummer)
+    var labels = state.numbers ? [null] : LABELS;
+    var n = labels.length + 3;
     var y0 = H / 2 - sp * (n - 1) / 2;
     for (var t = 0; t < 2; t++) {
       var cx = t === 0 ? P / 2 : W - P / 2;
-      for (var i = 0; i < LABELS.length; i++) {
-        items.push({ type: 'player', team: t, label: LABELS[i], x: cx, y: y0 + i * sp, r: r });
+      for (var i = 0; i < labels.length; i++) {
+        items.push({ type: 'player', team: t, label: labels[i], x: cx, y: y0 + i * sp, r: r });
       }
-      items.push({ type: 'ball', x: cx, y: y0 + LABELS.length * sp, r: r * 0.75 });
-      items.push({ type: 'cart', x: cx, y: y0 + (LABELS.length + 1) * sp, r: r * 1.05 });
-      items.push({ type: 'basket', x: cx, y: y0 + (LABELS.length + 2) * sp, r: r * 0.9 });
+      var k = labels.length;
+      items.push({ type: 'ball', x: cx, y: y0 + k * sp, r: r * 0.75 });
+      items.push({ type: 'cart', x: cx, y: y0 + (k + 1) * sp, r: r * 1.05 });
+      items.push({ type: 'basket', x: cx, y: y0 + (k + 2) * sp, r: r * 0.9 });
     }
     return items;
   }
@@ -241,8 +255,44 @@
     c.strokeStyle = '#5a3a15'; c.lineWidth = Math.max(2, r * 0.16); c.stroke();
   }
 
+  // Nummern: jeder Spieler bekommt beim Anlegen die nächste Nummer seiner Farbe
+  function nextNum(team) {
+    var m = 0;
+    for (var i = 0; i < state.objects.length; i++) {
+      var o = state.objects[i];
+      if (o.type === 'player' && o.team === team && o.num > m) m = o.num;
+    }
+    return m + 1;
+  }
+  function playerText(o) {
+    if (o.palette && state.numbers) return String(nextNum(o.team));
+    if (state.numbers || !o.label) return String(o.num || '');
+    return o.label;
+  }
+  // ältere Aufstellungen ohne Nummern: in Reihenfolge des Anlegens durchzählen
+  function fixNums() {
+    var c = [0, 0];
+    for (var i = 0; i < state.objects.length; i++) {
+      var o = state.objects[i];
+      if (o.type === 'player') { if (o.num) c[o.team] = Math.max(c[o.team], o.num); }
+    }
+    for (i = 0; i < state.objects.length; i++) {
+      o = state.objects[i];
+      if (o.type === 'player' && !o.num) o.num = ++c[o.team];
+    }
+  }
+  function oldSize(d) { // Größen aus Version 2.1 (S 75 %, M 100 %, L 130 %) übernehmen
+    return d.sv ? d.size : ({ S: 'M', M: 'L', L: 'L' }[d.size] || 'L');
+  }
+  function setNumbers(on) {
+    state.numbers = !!on;
+    var b = document.getElementById('bNum');
+    if (b) b.classList.toggle('on', state.numbers);
+    if (L) L.pal = buildPalette(L.W, L.H, L.P);
+  }
+
   function drawItem(c, o, x, y, r) {
-    if (o.type === 'player') drawPlayer(c, x, y, r, o.team, o.label);
+    if (o.type === 'player') drawPlayer(c, x, y, r, o.team, playerText(o));
     else if (o.type === 'ball') drawBall(c, x, y, r);
     else if (o.type === 'cart') drawCart(c, x, y, r);
     else if (o.type === 'basket') drawBasket(c, x, y, r);
@@ -272,16 +322,16 @@
     // Wagen/Körbe unten, darüber Bälle und Spieler
     for (i = 0; i < list.length; i++) {
       o = list[i];
-      if (o.type === 'cart' || o.type === 'basket') drawItem(c, o, X(o.x), Y(o.y), RAD[o.type] * s);
+      if (o.type === 'cart' || o.type === 'basket') drawItem(c, o, X(o.x), Y(o.y), rad(o.type) * s);
     }
     for (i = 0; i < list.length; i++) {
       o = list[i];
-      if (o.type === 'player' || o.type === 'ball') drawItem(c, o, X(o.x), Y(o.y), RAD[o.type] * s);
+      if (o.type === 'player' || o.type === 'ball') drawItem(c, o, X(o.x), Y(o.y), rad(o.type) * s);
     }
     if (extra && extra.drag) {
       o = extra.drag;
       c.globalAlpha = 0.85;
-      drawItem(c, o, X(o.x), Y(o.y), RAD[o.type] * s);
+      drawItem(c, o, X(o.x), Y(o.y), rad(o.type) * s);
       c.globalAlpha = 1;
     }
   }
@@ -376,12 +426,13 @@
 
     for (var i = 0; i < L.pal.length; i++) {
       var it = L.pal[i];
+      if (it.type === 'player') it.palette = true;
       drawItem(ctx, it, it.x, it.y, it.r);
     }
   }
 
   // ---------- Verlauf / Speichern ----------
-  function snapshot() { return { o: JSON.stringify(state.objects), bg: state.bg }; }
+  function snapshot() { return { o: JSON.stringify(state.objects), bg: state.bg, sz: state.size, nm: state.numbers }; }
   function pushHistory(snap) {
     history.push(snap || snapshot());
     if (history.length > 60) history.shift();
@@ -390,14 +441,21 @@
     if (!history.length) return;
     var h = history.pop();
     state.objects = JSON.parse(h.o);
+    if (h.sz) setSize(h.sz);
+    setNumbers(!!h.nm);
     if (h.bg !== state.bg) setBg(h.bg);
     commit();
   }
   function commit() {
     try { localStorage.setItem('vbcoach_scene', JSON.stringify(state)); } catch (e) {
-      try { localStorage.setItem('vbcoach_scene', JSON.stringify({ objects: state.objects, bg: null })); } catch (e2) {}
+      try { localStorage.setItem('vbcoach_scene', JSON.stringify({ objects: state.objects, bg: null, size: state.size, numbers: state.numbers, sv: 2 })); } catch (e2) {}
     }
     render();
+  }
+  function setSize(z) {
+    state.size = SIZES[z] ? z : 'L';
+    var t = document.getElementById('szTxt');
+    if (t) t.textContent = state.size;
   }
   function setBg(d) {
     state.bg = d || null; bgImg = null;
@@ -417,7 +475,7 @@
   function inPalette(sx) { return sx < L.P || sx > L.W - L.P; }
   function r2(v) { return Math.round(v * 100) / 100; }
   function clampObj(o) {
-    var m = RAD[o.type] || PR;
+    var m = RAD[o.type] ? rad(o.type) : PR;
     o.x = r2(Math.max(VX0 + m, Math.min(VX0 + VW - m, o.x)));
     o.y = r2(Math.max(VY0 + m, Math.min(VY0 + VH - m, o.y)));
   }
@@ -426,7 +484,7 @@
     for (var i = state.objects.length - 1; i >= 0; i--) {
       var o = state.objects[i];
       if (!isItem(o)) continue;
-      var r = RAD[o.type] + tol;
+      var r = rad(o.type) + tol;
       if (Math.hypot(o.x - w.x, o.y - w.y) <= r) return i;
     }
     return -1;
@@ -462,7 +520,7 @@
       var it = L.pal[i];
       if (Math.hypot(it.x - p.sx, it.y - p.sy) <= it.r + (touch ? 10 : 4)) {
         var o = it.type === 'player'
-          ? { type: 'player', team: it.team, label: it.label, x: w.x, y: w.y }
+          ? { type: 'player', team: it.team, label: it.label || null, num: nextNum(it.team), x: w.x, y: w.y }
           : { type: it.type, x: w.x, y: w.y };
         act = { kind: 'new', obj: o };
         temp.drag = o;
@@ -577,6 +635,11 @@
   document.getElementById('bDash').addEventListener('click', function () {
     dashed = !dashed; this.classList.toggle('on', dashed);
   });
+  document.getElementById('bNum').addEventListener('click', function () {
+    pushHistory();
+    setNumbers(!state.numbers);
+    commit();
+  });
   document.getElementById('bArrow').addEventListener('click', function () {
     arrows = !arrows; this.classList.toggle('on', arrows);
   });
@@ -598,6 +661,11 @@
   function fsChange() { bFull.classList.toggle('on', !!fsEl()); setTimeout(layout, 100); }
   document.addEventListener('fullscreenchange', fsChange);
   document.addEventListener('webkitfullscreenchange', fsChange);
+  document.getElementById('bSize').addEventListener('click', function () {
+    pushHistory();
+    setSize({ S: 'M', M: 'L', L: 'S' }[state.size] || 'L');
+    commit();
+  });
   document.getElementById('bNew').addEventListener('click', function () {
     pushHistory();
     state.objects = []; setBg(null);
@@ -676,7 +744,7 @@
     var bin = atob(url.split(',')[1]);
     var jpg = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) jpg[i] = bin.charCodeAt(i);
-    var data = JSON.stringify({ v: 1, objects: state.objects, bg: state.bg });
+    var data = JSON.stringify({ v: 1, sv: 2, objects: state.objects, bg: state.bg, size: state.size, numbers: state.numbers });
     var out = embed(jpg, new TextEncoder().encode(data));
     var blob = new Blob([out], { type: 'image/jpeg' });
     var d = new Date();
@@ -766,6 +834,9 @@
           var d = JSON.parse(txt);
           pushHistory();
           state.objects = d.objects || [];
+          fixNums();
+          setSize(oldSize(d));
+          setNumbers(!!d.numbers);
           setBg(d.bg || null);
           commit();
           return;
@@ -796,7 +867,10 @@
   // ---------- Start ----------
   try {
     var saved = JSON.parse(localStorage.getItem('vbcoach_scene') || 'null');
-    if (saved && saved.objects) { state.objects = saved.objects; setBg(saved.bg || null); }
+    if (saved && saved.objects) {
+      state.objects = saved.objects; fixNums();
+      setSize(oldSize(saved)); setNumbers(!!saved.numbers); setBg(saved.bg || null);
+    }
   } catch (e) {}
 
   window.addEventListener('resize', function () { setTimeout(layout, 50); });
@@ -816,7 +890,7 @@
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     var reloading = false;
     var upd = document.getElementById('upd');
-    navigator.serviceWorker.register('sw.js').then(function (reg) {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
       function offer() { if (reg.waiting && navigator.serviceWorker.controller) upd.style.display = 'block'; }
       function watch(w) { if (w) w.addEventListener('statechange', function () { if (w.state === 'installed') offer(); }); }
       offer();
